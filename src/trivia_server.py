@@ -23,6 +23,7 @@ Another section...
 import socket
 import select
 import pickle
+import random
 from typing import Union
 import chatlib
 from chatlib import ProtocolUser
@@ -37,10 +38,12 @@ SERVER_IP = LISTEN_ALL_IP
 
 NUMBER_OF_ANSWERS = 4
 HIGHSCORE_TABLE_SIZE = 3
+CORRECT_ANSWER_SCORE = 5
 
 UNKNOWN_ERROR_OCCURRED = "ERROR: An unknown error occured."
 ERROR_USERNAME_DOES_NOT_EXIST = "Error: Username does not exist!"
 ERROR_PASSWORD_DOES_NOT_MATCH = "Error: Password does not match!"
+ERROR_INVALID_ANSWER = "Error: Invalid answer! Must be a number between 1-4."
 
 # ====================
 # ===== Utility Functions:
@@ -527,14 +530,24 @@ class Server(ProtocolUser):
         # self.socket.settimeout(DEFAULT_TIMEOUT)
 
         self.users = {
-            "test" : User("test", "test"),
+            "test": User("test", "test"),
             "master": User("master", "12345", 300, [2313, 4122]),
             "wannabe master": User("wannabe master", "12345", 295, [2313, 4122]),
             "looser": User("master", "12345")
-            }
+        }
         self.questions = {
-            2313: Question("How much is 2+2?", ("3", "4", "2", "1"), 2),
-            4122: Question("What is the capital of France?", ("Lion", "Marseille", "Paris", "Montpellier"), 3)
+            1: Question("How much is 2+2?",
+                        ("3", "4", "2", "1"),
+                        2),
+            2: Question("What is the capital of France?",
+                        ("Lion", "Marseille", "Paris", "Montpellier"),
+                        3),
+            3: Question("What geometric shape is generally used for stop signs?",
+                        ("Triangle", "Octagon", "Rectangle", "Square"),
+                        2),
+            4: Question("What is the name of the biggest technology company in South Korea?",
+                        ("Mazda", "Xiaomi", "Apple", "Samsung"),
+                        4)
         }
         self.logged_users = {}
 
@@ -706,7 +719,6 @@ class Server(ProtocolUser):
         Returns: None (sends answer to client)
         """
         assert isinstance(client, socket.socket) and isinstance(data, str)
-
         data_list = self._split_data(data, 2)
         if not data_list:
             self._send_error(client)
@@ -724,10 +736,17 @@ class Server(ProtocolUser):
 
     def _handle_logout_message(self, client: socket.socket) -> None:
         """
-        Closes the given socket (in laster chapters, also remove user from logged_users dictioary)
-        Recieves: socket
-        Returns: None
-            """
+        Closes the logging-out socket and removes user from logged_users dictioary.
+
+        This function alse prints a message to the screen.
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - The socket to close.
+        """
         assert isinstance(client, socket.socket)
         assert client.getpeername() in self._logged_users  # TODO: remove it
         del self._logged_users[client.getpeername()]
@@ -771,17 +790,43 @@ class Server(ProtocolUser):
         logged_msg = ','.join(self._logged_users.values())
         self.build_and_send_message(client, "get_logged_users", logged_msg)
 
+    def _get_random_question(self) -> str:
+        q_num = random.choice(list(self._questions.keys()))
+        q = self._questions[q_num]
+        q_elements = (str(q_num), q._question) + tuple(q._optional_answers.values())
+        return self._join_data(q_elements)
+
+    def _handle_get_question_message(self, client: socket.socket) -> None:
+        assert isinstance(client, socket.socket)
+        self.build_and_send_message(client, "get_question", self._get_random_question())
+
+    def _handle_send_answer_message(self, client: socket.socket, answer_data: str) -> None:
+        assert isinstance(client, socket.socket) and isinstance(answer_data, str)
+        answer_parts = self._split_data(answer_data, 2)
+        if not answer_parts or len(answer_parts) != 2:
+            self._send_error(client, ERROR_INVALID_ANSWER)
+            return
+        try:
+            q_num, answer = int(answer_parts[0]), int(answer_parts[1]) # checks if integers.
+            question = self._questions[q_num] # checks if question number exists.
+            question._optional_answers[answer] # checks if answer is between 1-4.
+        except (ValueError, KeyError):
+            self._send_error(client, ERROR_INVALID_ANSWER)
+            return
+        if answer == question._answer:
+            self.build_and_send_message(client, "send_answer_correct")
+            self._users[self._logged_users[client.getpeername()]].add_score(CORRECT_ANSWER_SCORE)
+        else:
+            self.build_and_send_message(client, "send_answer_wrong", str(question._answer))
+
     def handle_client_message(self, client: socket.socket, cmd: str, data: str) -> None:
         """
         Gets message code and data and calls the right function to handle command
         Recieves: socket, message code and data
         Returns: None
         """
-        if not isinstance(client, socket.socket):
+        if not isinstance(client, socket.socket) or not all(isinstance(s, str) for s in [cmd, data]):
             raise TypeError
-        if not isinstance(cmd, str) or not isinstance(data, str):
-            raise TypeError
-
         if cmd == chatlib.PROTOCOL_CLIENT["login"]:
             self._handle_login_message(client, data)
         elif cmd == chatlib.PROTOCOL_CLIENT["logout"]:
@@ -792,24 +837,53 @@ class Server(ProtocolUser):
             self._handle_get_highscore_message(client)
         elif cmd == chatlib.PROTOCOL_CLIENT["get_logged_users"]:
             self._handle_get_logged_users_message(client)
+        elif cmd == chatlib.PROTOCOL_CLIENT["get_question"]:
+            self._handle_get_question_message(client)
+        elif cmd == chatlib.PROTOCOL_CLIENT["send_answer"]:
+            self._handle_send_answer_message(client, data)
         else:
             self._send_error(client, UNKNOWN_ERROR_OCCURRED)
-            # TODO:....
 
     def terminate_client(self, client: socket.socket) -> None:
+        """
+        Closes the given client socket and removes user from logged_users dictioary.
+
+        This function alse prints a message to the screen.
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - The socket to close.
+
+        Raises
+        ------
+        - TypeError
+            - If the argument is of inappropriate type
+        - OSError
+            - In case of an attempt to close on something that is not a socket.
+        """
         if not isinstance(client, socket.socket):
             raise TypeError
-        self._handle_logout_message(client)
+        if client.getpeername() in self._logged_users:
+            del self._logged_users[client.getpeername()]
+        try:
+            if client.getpeername() in self._logged_users:
+                del self._logged_users[client.getpeername()]
+            assert client.getpeername() not in self._logged_users  # TODO: remove it
+            client.close()
+            print("Connection closed!")
+        except OSError as error:
+            raise error
 
 
 # ====================
 # ===== Globals:
 
-
 #users: dict[str,User] = {}
 #questions: dict[int,Question] = {}
 # logged_users = {} # a dictionary of client hostnames to usernames - will be used later
-
 
 # ====================
 # ===== Main Function:

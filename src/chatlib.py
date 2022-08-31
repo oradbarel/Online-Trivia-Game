@@ -210,8 +210,8 @@ class ProtocolUser(ABC):
         return data_list
 
     @staticmethod
-    def _join_data(words: list[str]) -> str:
-        """Gets a list, joins all of it's fields to one string divided by the data delimiter.
+    def _join_data(words: Union[list[str], tuple[str]]) -> str:
+        """Gets a list or a tuple, joins all of it's fields to one string divided by the data delimiter.
 
         ------
 
@@ -233,7 +233,9 @@ class ProtocolUser(ABC):
             - If one of the arguments is of a wrong type.
         """
 
-        if (not isinstance(words, list)) or (not all(isinstance(word, str) for word in words)):
+        if not isinstance(words, list) and not isinstance(words, tuple):
+            raise TypeError
+        if not all(isinstance(word, str) for word in words):
             raise TypeError
         return DATA_DELIMETER.join(words)
 
