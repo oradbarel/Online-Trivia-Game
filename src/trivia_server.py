@@ -19,7 +19,8 @@ Another section...
 
 # ===== Imports:
 
-
+# For Python versions between 3.7 to 3.9, we need the following line:
+from __future__ import annotations
 import socket
 import select
 import pickle
@@ -27,6 +28,7 @@ import random
 from typing import Union
 import chatlib
 from chatlib import ProtocolUser, PROTOCOL_CLIENT, PROTOCOL_SERVER_OK, PROTOCOL_SERVER_ERROR
+
 
 
 # ====================

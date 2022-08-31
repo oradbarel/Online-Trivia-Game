@@ -1,9 +1,12 @@
 # ===== Imports:
 
+# For Python versions between 3.7 to 3.9, we need the following line:
+from __future__ import annotations
 import socket
 import chatlib
 from typing import Union
 from chatlib import ProtocolUser
+
 
 
 # ====================

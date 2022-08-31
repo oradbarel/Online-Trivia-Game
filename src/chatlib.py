@@ -3,7 +3,16 @@
 
 """
 # Chatlib
-A modul for all the the trivia-protocol constants and some basic functions and classes.
+
+A module for all the the trivia-protocol constants and some basic functions and classes.
+
+Provides:
+
+1. Some constants that match the game protocol.
+
+2. A base class called `ProtocolUser`, for both Client and Server.
+
+3. Some helper functions for colored printing, using `colorama` module.
 
 Examples
 --------
@@ -11,10 +20,12 @@ Examples
 ... # sc
 """
 
+
 # ====================
 # ===== Imports:
 
-
+# For Python versions between 3.7 to 3.9, we need the following line:
+from __future__ import annotations
 import socket
 from abc import ABC, abstractmethod
 from colorama import Fore, Style, init as colorma_init
