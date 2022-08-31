@@ -7,3 +7,8 @@
 
 ## Download:
     git clone https://github.com/oradbarel/Online-Trivia-Game.git
+    
+## Prerequisites:
+For running successfully the code, you will need the following:
+* Python 3.7+
+* Install `colorama`. You can use the following: `pip install colorama` 
