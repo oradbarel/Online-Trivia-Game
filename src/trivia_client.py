@@ -2,11 +2,9 @@
 
 # For Python versions between 3.7 to 3.9, we need the following line:
 from __future__ import annotations
-import socket
 import chatlib
 from typing import Union
-from chatlib import ProtocolUser
-
+from chatlib import ProtocolUser, PROTOCOL_CLIENT, PROTOCOL_SERVER_OK
 
 
 # ====================
@@ -119,7 +117,7 @@ class Client(ProtocolUser):
         except ConnectionRefusedError as e:
             raise e
 
-    def _recv_message_and_parse(self) -> Union[tuple[str, str],tuple[None, None]]:
+    def _recv_message_and_parse(self) -> Union[tuple[str, str], tuple[None, None]]:
         """
         Recieves a new message from the socket and then parses the message using `chatlib`.
 
@@ -179,12 +177,10 @@ class Client(ProtocolUser):
 
         if not isinstance(cmd, str) or not isinstance(data, str):
             raise TypeError
-
-        cmd_protocol = chatlib.PROTOCOL_CLIENT[cmd]
+        cmd_protocol = PROTOCOL_CLIENT[cmd]
         msg = ProtocolUser._build_message(cmd_protocol, data)
         if not msg:
             raise ValueError
-
         try:
             self.socket.send(msg.encode())
         except InterruptedError as error:
@@ -260,28 +256,22 @@ class Client(ProtocolUser):
 
         If login fails, will try again untill success.
         """
-
         cmd_name = 'login'
         recv_cmd, recv_msg = '', ''
-
         while True:
             username = input("Please enter username: \n")
             password = input("Please enter password: \n")
             data = Client._join_data([username, password])
-
             if (len(data) > chatlib.DATA_FIELD_MAX_LENGTH):
                 _print_error_try_again(INPUT_TOO_LONG_MSG)
-
             try:
                 self._build_and_send_message(cmd_name, data)
             except Exception as e:
                 assert (not isinstance(e, (TypeError, ValueError)))
                 _print_unknown_error_try_again()
                 continue
-
             (recv_cmd, recv_msg) = self._recv_message_and_parse()
-
-            if recv_cmd == chatlib.PROTOCOL_SERVER_OK['login'] and recv_msg == '':
+            if recv_cmd == PROTOCOL_SERVER_OK['login'] and recv_msg == '':
                 _print_send_success(cmd_name)
                 break
             elif recv_cmd == chatlib.PROTOCOL_SERVER_ERROR:
@@ -303,7 +293,6 @@ class Client(ProtocolUser):
             - If `send` failed (i.e the syscall is interrupted).
         ------
         """
-
         cmd_name = 'logout'
         try:
             self._build_and_send_message(cmd_name)
@@ -325,16 +314,13 @@ class Client(ProtocolUser):
             - If `send` or `recv` failed (i.e the syscall is interrupted).
         ------
         """
-
         cmd_name = "get_score"
         recv_cmd, recv_msg = '', ''
-
         try:
             (recv_cmd, recv_msg) = self._build_send_recv_parse(cmd_name)
         except Exception as e:
             raise e
-
-        if recv_cmd == chatlib.PROTOCOL_SERVER_OK[cmd_name]:
+        if recv_cmd == PROTOCOL_SERVER_OK[cmd_name]:
             chatlib.print_server_msg("Your score is: " + recv_msg)
         elif recv_cmd == chatlib.PROTOCOL_SERVER_ERROR:
             _print_unknown_error()
@@ -363,16 +349,13 @@ class Client(ProtocolUser):
             - If `send` or `recv` failed (i.e the syscall is interrupted).
         ------
         """
-
         cmd_name = "get_highscore"
         recv_cmd, recv_msg = '', ''
-
         try:
             (recv_cmd, recv_msg) = self._build_send_recv_parse(cmd_name)
         except Exception as e:
             raise e
-
-        if recv_cmd == chatlib.PROTOCOL_SERVER_OK[cmd_name]:
+        if recv_cmd == PROTOCOL_SERVER_OK[cmd_name]:
             chatlib.print_server_msg("High-Score table is:\n" + recv_msg)
         elif recv_cmd == chatlib.PROTOCOL_SERVER_ERROR:
             _print_unknown_error()
@@ -407,20 +390,16 @@ class Client(ProtocolUser):
             - If one of the parameters does not match the protocol (i.e bad response).
         ------
         """
-
-        if recv_cmd != chatlib.PROTOCOL_SERVER_OK['get_question']:
+        if recv_cmd != PROTOCOL_SERVER_OK['get_question']:
             raise ValueError
-
         q_parts = Client._split_data(recv_msg, chatlib.QUESTION_PRATS_NUM)
         if not q_parts:
             raise ValueError
-
         msg = "Q#{} : {}:\n\
             1. {}\n\
             2. {}\n\
             3. {}\n\
             4. {}".format(*q_parts)
-
         chatlib.print_server_msg(msg)
 
     @staticmethod
@@ -453,10 +432,9 @@ class Client(ProtocolUser):
             - If one of the parameters does not match the protocol (i.e bad response).
         ------
         """
-
-        if recv_cmd == chatlib.PROTOCOL_SERVER_OK["send_answer_correct"]:
+        if recv_cmd == PROTOCOL_SERVER_OK["send_answer_correct"]:
             chatlib.print_server_msg("YES!!!!!")
-        elif recv_cmd == chatlib.PROTOCOL_SERVER_OK["send_answer_wrong"]:
+        elif recv_cmd == PROTOCOL_SERVER_OK["send_answer_wrong"]:
             chatlib.print_server_msg("Nope! Coorect answer is #" + recv_msg)
         else:
             raise ValueError
@@ -485,14 +463,12 @@ class Client(ProtocolUser):
             (recv_cmd, recv_msg) = self._build_send_recv_parse(cmd_name)
         except Exception as e:
             raise e
-
         # Print the question:
         try:
             Client._printQuestion(recv_cmd, recv_msg)
         except:
             _print_unknown_error()
             return
-
         # Get an answer from the user:
         answer = ''
         while True:
@@ -549,10 +525,8 @@ class Client(ProtocolUser):
             - If one of the parameters does not match the protocol (i.e bad response).
         ------
         """
-
-        if recv_cmd != chatlib.PROTOCOL_SERVER_OK['get_logged_users']:
+        if recv_cmd != PROTOCOL_SERVER_OK['get_logged_users']:
             raise ValueError
-
         users = recv_msg.split(chatlib.LOGGED_USERS_DELIMETER)
         msg = "Logged users: \n" + ', '.join(users)
         chatlib.print_server_msg(msg)
@@ -571,15 +545,12 @@ class Client(ProtocolUser):
             - If `send` or `recv` failed (i.e the syscall is interrupted).
         ------
         """
-
         cmd_name = "get_logged_users"
         recv_cmd, recv_msg = '', ''
-
         try:
             (recv_cmd, recv_msg) = self._build_send_recv_parse(cmd_name)
         except Exception as e:
             raise e
-
         try:
             Client._printLoggedUsers(recv_cmd, recv_msg)
         except Exception as e:

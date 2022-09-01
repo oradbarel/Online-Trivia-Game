@@ -30,7 +30,6 @@ import chatlib
 from chatlib import ProtocolUser, PROTOCOL_CLIENT, PROTOCOL_SERVER_OK, PROTOCOL_SERVER_ERROR
 
 
-
 # ====================
 
 # ===== Constants:
@@ -47,14 +46,11 @@ UNKNOWN_ERROR_OCCURRED = "ERROR: An unknown error occured."
 ERROR_USERNAME_DOES_NOT_EXIST = "Error: Username does not exist!"
 ERROR_PASSWORD_DOES_NOT_MATCH = "Error: Password does not match!"
 ERROR_INVALID_ANSWER = "Error: Invalid answer! Must be a number between 1-4."
+ERROR_CLIENT_WAS_ADDED_WRONG = "Error: This client was not added by `accept_new_client`!"
 
 # ====================
-# ===== Utility Functions:
-
-
-# ====================
-
 # ===== Classes:
+
 
 class Question:
     """
@@ -113,7 +109,6 @@ class Question:
         self.question = question
         self.optional_answers = optional_answers
         self.answer = answer
-        # TODO: Maybe a long string for all the three string together...
 
     @property
     def question(self) -> str:
@@ -263,7 +258,7 @@ class User:
     """
 
     def __init__(self, name: str, password: str, score: int = 0,
-                 questions_asked: Union[list[int],None] = None) -> None:
+                 questions_asked: Union[list[int], None] = None) -> None:
         """
         Creates a new user.
 
@@ -503,7 +498,7 @@ class Server(ProtocolUser):
     -------
     recv_message_and_parse()
 
-    build_and_send_message(cmd, data='')
+    _build_and_append_message(cmd, data='')
 
     terminate()
         Closes the server socket (for use when the socket is no longer needed).
@@ -530,8 +525,6 @@ class Server(ProtocolUser):
             - In case one of the parameters is of inappropriate type.
         """
         super().__init__()
-        # self.socket.settimeout(DEFAULT_TIMEOUT)
-
         self.users = {
             "test": User("test", "test"),
             "master": User("master", "12345", 300, [2313, 4122]),
@@ -553,6 +546,8 @@ class Server(ProtocolUser):
                         4)
         }
         self.logged_users = {}
+        self.messages_to_send = []
+        self.clients = []
 
         # Bind the socket to the IP and port of the socket:
         self.socket.bind((server_ip, server_port))
@@ -561,7 +556,7 @@ class Server(ProtocolUser):
 
     @property
     def users(self) -> dict[str, User]:
-        """:obj:`dict`[:obj:`str`,:obj:`User`]: A dictionary of all the users.
+        """`dict`[`str`,`User`]: A dictionary of all the users - whether connected or not.
 
         #### Pay attention: The getter for this property returns a shallow copy of this dict.
         """
@@ -569,6 +564,10 @@ class Server(ProtocolUser):
 
     @users.setter
     def users(self, users: dict[str, User]) -> None:
+        if not isinstance(users, dict):
+            raise TypeError
+        if not all(isinstance(s, str) and isinstance(u, User) for (s, u) in users.items()):
+            raise TypeError
         self._users = users
 
     @property
@@ -581,6 +580,10 @@ class Server(ProtocolUser):
 
     @questions.setter
     def questions(self, questions: dict[int, Question]) -> None:
+        if not isinstance(questions, dict):
+            raise TypeError
+        if not all(isinstance(i, int) and isinstance(q, Question) for (i, q) in questions.items()):
+            raise TypeError
         self._questions = questions
 
     @property
@@ -593,7 +596,52 @@ class Server(ProtocolUser):
 
     @logged_users.setter
     def logged_users(self, logged_users: dict[tuple[str, int], str]) -> None:
+        if not isinstance(logged_users, dict):
+            raise TypeError
+        if not all(isinstance(t, tuple) for t in logged_users):
+            raise TypeError
+        if not all(isinstance(s, str) and isinstance(i, int) for (s, i) in logged_users.keys()):
+            raise TypeError
+        if not all(isinstance(s, str) for s in logged_users.values()):
+            raise TypeError
         self._logged_users = logged_users
+
+    @property
+    def messages_to_send(self) -> list[tuple[socket.socket, str]]:
+        """`list`[`tuple`[`socket.socket`,`str`]]: A list of all (client, msg) tuples to be sent.
+
+        We make it a list to keep our server a fair server (in terms of FCFS).
+
+        #### Pay attention: The getter for this property returns a shallow copy of this list.
+        """
+        return self._messages_to_send.copy()
+
+    @messages_to_send.setter
+    def messages_to_send(self, messages_to_send: list[tuple[socket.socket, str]]) -> None:
+        if not isinstance(messages_to_send, list):
+            raise TypeError
+        if not all(isinstance(t, tuple) for t in messages_to_send):
+            raise TypeError
+        if not all(isinstance(soc, socket.socket) and isinstance(s, str)
+                   for (soc, s) in messages_to_send):
+            raise TypeError
+        self._messages_to_send = messages_to_send
+
+    @property
+    def clients(self) -> list[socket.socket]:
+        """`list`[`socket.socket`]: A list of all clients which have been accepted by `accept`.
+
+            #### Pay attention: The getter for this property returns a shallow copy of this list.
+        """
+        return self._clients
+
+    @clients.setter
+    def clients(self, clients: list[socket.socket]) -> None:
+        if not isinstance(clients, list):
+            raise TypeError
+        if not all(isinstance(soc, socket.socket) for soc in clients):
+            raise TypeError
+        self._clients = clients
 
     @staticmethod
     def recv_message_and_parse(client: socket.socket) -> Union[tuple[str, str], tuple[None, None]]:
@@ -644,12 +692,10 @@ class Server(ProtocolUser):
             print("[CLIENT]\t{}\nmsg:\t{}".format(client.getpeername(), data))
         return (cmd, msg)
 
-    @staticmethod
-    def build_and_send_message(client: socket.socket, cmd: str, data: str = '') -> None:
+    def _build_and_append_message(self, client: socket.socket, cmd: str, data: str = '') -> None:
         """
-        Builds a new message using `chatlib`, wanted code and message. Then, sends it to the socket.
-
-        This function alse prints a message with the data sent.
+        Builds a new message using `chatlib`, by code and message.
+        Then, appends it to the `_messages_to_send` list.
 
         ------
 
@@ -667,51 +713,54 @@ class Server(ProtocolUser):
 
         Raises
         ------
-        - TypeError
-            - If the argument is of inappropriate type
-        - ValueError
+        - AssertionError
             - If `cmd` or `data` does not match the protocol.
-        - InterruptedError
-            - If `send` failed (i.e the syscall is interrupted).
-        - ConnectionResetError
-            - In case of the client socket has been closed forcibly.
-        - OSError
-            - In case of an operation is attempted on something that is not a socket.
         """
 
-        if not isinstance(client, socket.socket) or \
-                not all(isinstance(s, str) for s in [cmd, data]):
-            raise TypeError
+        assert isinstance(client, socket.socket) and all(
+            isinstance(s, str) for s in [cmd, data])
         if cmd == PROTOCOL_SERVER_ERROR:
             cmd_protocol = cmd
         elif cmd in PROTOCOL_SERVER_OK.keys():
             cmd_protocol = PROTOCOL_SERVER_OK[cmd]
         else:
-            raise ValueError
+            raise AssertionError
         msg = ProtocolUser._build_message(cmd_protocol, data)
         if not msg:
-            raise ValueError
-        try:
-            client.send(msg.encode())
-        except (InterruptedError, ConnectionResetError, OSError) as error:
-            raise error
-        print("[SERVER]\t{}\nmsg:\t{}".format(
-            client.getpeername(), msg))
+            raise AssertionError
+        self._messages_to_send.append((client, msg))  # was added
+
+    def send_messages_to_ready_sockets(self, ready_to_write: list[socket.socket]) -> None:
+        if not isinstance(ready_to_write, list):
+            raise TypeError
+        if not all(isinstance(soc, socket.socket) for soc in ready_to_write):
+            raise TypeError
+        # TODO: Make here intersection for achiving O(n) complexity...
+        for msg in self._messages_to_send:
+            curr_socket, data = msg
+            if curr_socket in ready_to_write:
+                self._messages_to_send.remove(msg)
+                try:
+                    curr_socket.send(data.encode())
+                    print("[SERVER]\t{}\nmsg:\t{}".format(
+                        curr_socket.getpeername(), data))
+                except (ConnectionResetError, OSError) as error:
+                    self.terminate_client(curr_socket)
 
     @staticmethod
     def _send_error(client: socket.socket, error_mgs: str = UNKNOWN_ERROR_OCCURRED) -> None:
         """
         Send error message with given message to the client.
 
-        (Uses the method `build_and_send_message`).
+        (Uses the method `_build_and_append_message`).
 
         ------
 
         Parameters
         ------
         client: socket.socket
-            - The socket for sending the error. `Must be a real and exist socket`,
-            otherwise an `OSError` will be raised.
+            - The socket for sending the error.
+            Must be a real and exist socket, otherwise an `OSError` will be raised.
 
         error_mgs : str, (default `UNKNOWN_ERROR_OCCURRED`)
             - The error messgae to send.
@@ -719,11 +768,8 @@ class Server(ProtocolUser):
 
         # TODO: check if `error_mgs` is in the protocol.
         assert isinstance(client, socket.socket) and isinstance(error_mgs, str)
-        try:
-            Server.build_and_send_message(
-                client, PROTOCOL_SERVER_ERROR, error_mgs)
-        except Exception as exception:
-            raise exception
+        Server._build_and_append_message(
+            client, PROTOCOL_SERVER_ERROR, error_mgs)
 
     def _handle_login_message(self, client: socket.socket, data: str) -> None:
         """
@@ -732,14 +778,14 @@ class Server(ProtocolUser):
         If not - sends error and finished. If all ok, sends OK message and adds user and address
         to logged_users.
 
-        (Uses the method `build_and_send_message`).
+        (Uses the method `_build_and_append_message`).
 
         ------
 
         Parameters
         ------
         client: socket.socket
-            - The client socket. `Must be a real and exist socket`, otherwise an `OSError`
+            - The client socket. Must be a real and exist socket, otherwise an `OSError`
             will be raised.
 
         data : str
@@ -756,7 +802,7 @@ class Server(ProtocolUser):
         elif password != self.users[username].get_password():
             self._send_error(client, ERROR_PASSWORD_DOES_NOT_MATCH)
         else:
-            self.build_and_send_message(client, "login")
+            self._build_and_append_message(client, "login")
             assert client.getpeername() not in self._logged_users  # TODO: remove it
             self._logged_users[client.getpeername()] = username
             assert client.getpeername() in self._logged_users  # TODO: remove it
@@ -772,21 +818,24 @@ class Server(ProtocolUser):
         Parameters
         ------
         client: socket.socket
-            - The socket to close. `Must be a real and exist socket`, otherwise an `OSError`
-            will be raised.
+            - The socket to close.
+            Must be a real and exist socket, otherwise an `OSError` will be raised.
         """
         assert isinstance(client, socket.socket)
         assert client.getpeername() in self._logged_users  # TODO: remove it
         del self._logged_users[client.getpeername()]
         assert client.getpeername() not in self._logged_users  # TODO: remove it
         client.close()
+        assert client in self._clients
+        self._clients.remove(client)
+        assert client not in self._clients
         print("Connection closed!")
 
     def _handle_get_score_message(self, client: socket.socket) -> None:
         """
         Gets an address of a logged-in client and send the client its own score.
 
-        (Uses the method `build_and_send_message`).
+        (Uses the method `_build_and_append_message`).
 
         ------
 
@@ -794,8 +843,7 @@ class Server(ProtocolUser):
         ------
         client: socket.socket
             - A client socket which is already logged-in.
-
-        ------
+            Must be a real and exist socket, otherwise an `OSError` will be raised.
         """
         assert isinstance(client, socket.socket)
         client_address = client.getpeername()
@@ -803,20 +851,48 @@ class Server(ProtocolUser):
         username = self._logged_users[client_address]
         assert username in self._users
         score = str(self._users[username].get_score())
-        self.build_and_send_message(client, "get_score", score)
+        self._build_and_append_message(client, "get_score", score)
 
     def _handle_get_highscore_message(self, client: socket.socket) -> None:
+        """
+        Gets an address of a logged-in client and send the client the highscore messgae,
+        according to the protocol.
+
+        (Uses the method `_build_and_append_message`).
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - A client socket which is already logged-in.
+        Must be a real and exist socket, otherwise an `OSError` will be raised.
+        """
         assert isinstance(client, socket.socket)
-        greatest = sorted(self._users.values(), key=lambda user: user._score,
+        greatest = sorted(self.users.values(), key=lambda user: user._score,
                           reverse=True)[0:HIGHSCORE_TABLE_SIZE]
-        highscore = '\n'.join(": ".join((user._name, str(user._score)))
+        highscore = '\n'.join(": ".join((user.name, str(user.score)))
                               for user in greatest)
-        self.build_and_send_message(client, "get_highscore", highscore)
+        self._build_and_append_message(client, "get_highscore", highscore)
 
     def _handle_get_logged_users_message(self, client: socket.socket) -> None:
+        """
+        Gets an address of a logged-in client and send the client all the logged-in users,
+        according to the protocol.
+
+        (Uses the method `_build_and_append_message`).
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - A client socket which is already logged-in.
+        Must be a real and exist socket, otherwise an `OSError` will be raised.
+        """
         assert isinstance(client, socket.socket)
         logged_msg = ','.join(self._logged_users.values())
-        self.build_and_send_message(client, "get_logged_users", logged_msg)
+        self._build_and_append_message(client, "get_logged_users", logged_msg)
 
     def _get_random_question(self) -> str:
         """
@@ -834,15 +910,45 @@ class Server(ProtocolUser):
         q_num = random.choice(list(self._questions.keys()))
         question = self._questions[q_num]
         q_elements = (str(q_num), question._question) + \
-            tuple(question._optional_answers.values())
+            tuple(question.optional_answers.values())
         return self._join_data(q_elements)
 
     def _handle_get_question_message(self, client: socket.socket) -> None:
+        """
+        Gets an address of a logged-in client, rand a question from the repository and then
+        sends it to the client.
+
+        (Uses the method `_build_and_append_message`).
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - A client socket which is already logged-in.
+        Must be a real and exist socket, otherwise an `OSError` will be raised.
+        """
         assert isinstance(client, socket.socket)
-        self.build_and_send_message(
+        self._build_and_append_message(
             client, "get_question", self._get_random_question())
 
     def _handle_send_answer_message(self, client: socket.socket, answer_data: str) -> None:
+        """
+        Gets an address of a logged-in client and its answer messgae. Then, checks the answer
+        and sends an appropriate message.
+
+        In the case of a message that does not comply with the protocol, sends an error messgae.
+
+        (Uses the method `_build_and_append_message`).
+
+        ------
+
+        Parameters
+        ------
+        client: socket.socket
+            - A client socket which is already logged-in.
+        Must be a real and exist socket, otherwise an `OSError` will be raised.
+        """
         assert isinstance(client, socket.socket) and isinstance(
             answer_data, str)
         answer_parts = self._split_data(answer_data, 2)
@@ -861,18 +967,17 @@ class Server(ProtocolUser):
             self._send_error(client, ERROR_INVALID_ANSWER)
             return
         if answer == question._answer:
-            self.build_and_send_message(client, "send_answer_correct")
+            self._build_and_append_message(client, "send_answer_correct")
             self._users[self._logged_users[client.getpeername()]].add_score(
                 CORRECT_ANSWER_SCORE)
         else:
-            self.build_and_send_message(
+            self._build_and_append_message(
                 client, "send_answer_wrong", str(question._answer))
 
     def handle_client_message(self, client: socket.socket, cmd: str, data: str) -> None:
         """
         Gets message cmd and data and calls the right function to handle command.
-
-
+        Then, the message will be appended to the `_messages_to_send` list.
 
         ------
 
@@ -893,37 +998,73 @@ class Server(ProtocolUser):
         ------
         - TypeError
             - If the argument is of inappropriate type
-        - OSError
-            - In case of an operation is attempted on something that is not a socket.
         """
         if not isinstance(client, socket.socket) or \
                 not all(isinstance(s, str) for s in [cmd, data]):
             raise TypeError
-        try:
-            if cmd == PROTOCOL_CLIENT["login"]:
-                self._handle_login_message(client, data)
-            elif cmd == PROTOCOL_CLIENT["logout"]:
-                self._handle_logout_message(client)
-            elif cmd == PROTOCOL_CLIENT["get_score"]:
-                self._handle_get_score_message(client)
-            elif cmd == PROTOCOL_CLIENT["get_highscore"]:
-                self._handle_get_highscore_message(client)
-            elif cmd == PROTOCOL_CLIENT["get_logged_users"]:
-                self._handle_get_logged_users_message(client)
-            elif cmd == PROTOCOL_CLIENT["get_question"]:
-                self._handle_get_question_message(client)
-            elif cmd == PROTOCOL_CLIENT["send_answer"]:
-                self._handle_send_answer_message(client, data)
-            else:
-                self._send_error(client, UNKNOWN_ERROR_OCCURRED)
-        except (ConnectionResetError, OSError):
-            self.terminate_client(client)
+        if cmd == PROTOCOL_CLIENT["login"]:
+            self._handle_login_message(client, data)
+        elif cmd == PROTOCOL_CLIENT["logout"]:
+            self._handle_logout_message(client)
+        elif cmd == PROTOCOL_CLIENT["get_score"]:
+            self._handle_get_score_message(client)
+        elif cmd == PROTOCOL_CLIENT["get_highscore"]:
+            self._handle_get_highscore_message(client)
+        elif cmd == PROTOCOL_CLIENT["get_logged_users"]:
+            self._handle_get_logged_users_message(client)
+        elif cmd == PROTOCOL_CLIENT["get_question"]:
+            self._handle_get_question_message(client)
+        elif cmd == PROTOCOL_CLIENT["send_answer"]:
+            self._handle_send_answer_message(client, data)
+        else:
+            self._send_error(client, UNKNOWN_ERROR_OCCURRED)
+
+    def accept_new_client(self) -> socket.socket:
+        """
+        Using `accept`, accepting a new client and adds it to clients list.
+
+        This method also prints a "new client joined" messgae.
+
+        ------
+
+        Notes
+        ------
+        Since `accept` uses a blocking syscall, if there is no new socket at the moment,
+        this method will block the process.
+        """
+        (client_socket, client_address) = self.socket.accept()
+        self._clients.append(client_socket)
+        print("New client joined!\t{}".format(client_address))
+        # TODO: print all connected clients.
+        return client_socket
+
+    def select_clients(self) -> tuple[list[socket.socket], list[socket.socket],
+                                      list[socket.socket]]:
+        """
+        Performes the function `select.select`.
+
+        ------
+
+        Returns
+        ------
+        - tuple[list, list, list]
+            - (ready_to_read, ready_to_write, in_error).
+
+        ------
+
+        Notes
+        ------
+        Since `select` uses a blocking syscall, this method will block the process until
+        one or more file descriptors are ready for some kind of I/O.
+        """
+        return select.select([self.socket] + self._clients, self._clients, [])
 
     def terminate_client(self, client: socket.socket) -> None:
         """
-        Closes the given client socket and removes user from logged_users dictioary.
+        Closes the client socket, removes user from `logged_users` and removes client
+        from `clients`.
 
-        This function alse prints a message to the screen.
+        This method alse prints a message to the screen.
 
         ------
 
@@ -938,45 +1079,51 @@ class Server(ProtocolUser):
         ------
         - TypeError
             - If the argument is of inappropriate type
-        - OSError
-            - In case of an attempt to close on something that is not a socket.
         """
         if not isinstance(client, socket.socket):
             raise TypeError
-        if client.getpeername() in self._logged_users:
-            del self._logged_users[client.getpeername()]
+        if client not in self._clients:
+            return
+        self._clients.remove(client)
         try:
             if client.getpeername() in self._logged_users:
                 del self._logged_users[client.getpeername()]
-            assert client.getpeername() not in self._logged_users  # TODO: remove it
+            assert client.getpeername() not in self._logged_users
             client.close()
-            print("Connection closed!")
-        except OSError as error:
-            raise error
+        except OSError:
+            pass
+        print("Connection closed!")
 
 
 # ====================
 # ===== Main Function:
 
 def main():
+    """
+    Main fuction, which runs a multy-clients server and serving all the requests.
+    """
     print("Welcome to Trivia Server!\nstarting up on port 5678.")
     server = Server()
     print("Server is up and ready.")
-
+    # - Main loop:
     while True:
-        # Wait for an incoming connection
-        (client_socket, client_address) = server.socket.accept()
-        print("New client joined!\t{}".format(client_address))
+        # - Use `select` for getting all the ready_to_read and ready_to_write clients:
+        ready_to_read, ready_to_write = server.select_clients()[0:2]
+        # - Handle ready_to_read:
+        for curr in ready_to_read:
+            # - In case of a new client:
+            if curr is server.socket:
+                server.accept_new_client()
+            # - In case of an existing client:
+            else:
+                cmd, data = server.recv_message_and_parse(curr)
+                if not cmd:
+                    server.terminate_client(curr)
+                else:
+                    server.handle_client_message(curr, cmd, data)
 
-        while True:
-            # Read the client's message:
-            cmd, data = server.recv_message_and_parse(client_socket)
-            if not cmd:
-                server.terminate_client(client_socket)
-                break
-            server.handle_client_message(client_socket, cmd, data)
-            if cmd == PROTOCOL_CLIENT["logout"]:
-                break
+        # handle ready to write
+        server.send_messages_to_ready_sockets(ready_to_write)
 
 
 # ====================
