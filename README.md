@@ -1,5 +1,10 @@
-# Online-Trivia-Game
-### A Python Trivia Game application, for the terminal.
+<h1 align="center">
+<img src="https://user-images.githubusercontent.com/75837421/188320415-2bd525a0-9920-4335-92c9-c45c4fc27299.png" width="200" height="200" align="center">
+    
+Online Trivia Game
+</h1>
+
+<h3 align="center">A Python Trivia Game application, for the terminal.</h3>
 
 ## Description:
 #### This is a simple trivia game, with a server responsible for asking the question, hold the data and handle clients requests.
