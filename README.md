@@ -4,7 +4,7 @@
 ## Description:
 #### This is a simple trivia game, with a server responsible for asking the question, hold the data and handle clients requests.
 #### You can find the Pyhton source code in `src`, which mainly composed of three modules.
-#### The data (users an questions) is stored and read using `json` files.
+#### The data (users and questions) is stored and read using `json` files.
 
 ## Download:
     git clone https://github.com/oradbarel/Online-Trivia-Game.git
