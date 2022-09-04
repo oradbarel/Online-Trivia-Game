@@ -559,7 +559,6 @@ class Client(ProtocolUser):
 
 
 # ====================
-
 # ===== Main Function:
 
 
@@ -569,7 +568,6 @@ def main():
     my_player.login()
 
     # Main loop for sending and reciving:
-
     prompt_dict = {
         'p': "Play a trivia question",
         's': 'Get my score',
@@ -599,8 +597,6 @@ def main():
     my_player.logout()
     my_player.terminate()
 
-
-# ====================
 
 if __name__ == '__main__':
     main()

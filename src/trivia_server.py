@@ -21,13 +21,14 @@ Another section...
 
 # For Python versions between 3.7 to 3.9, we need the following line:
 from __future__ import annotations
+import json
 import socket
 import select
-import pickle
 import random
 from typing import Union
 import chatlib
-from chatlib import ProtocolUser, PROTOCOL_CLIENT, PROTOCOL_SERVER_OK, PROTOCOL_SERVER_ERROR
+from chatlib import ProtocolUser, User, Question,\
+    PROTOCOL_CLIENT, PROTOCOL_SERVER_OK, PROTOCOL_SERVER_ERROR
 
 
 # ====================
@@ -38,7 +39,9 @@ from chatlib import ProtocolUser, PROTOCOL_CLIENT, PROTOCOL_SERVER_OK, PROTOCOL_
 LISTEN_ALL_IP = "0.0.0.0"
 SERVER_IP = LISTEN_ALL_IP
 
-NUMBER_OF_ANSWERS = 4
+USERS_PATH = "users.json"
+QUESTIONS_PATH = "questions.json"
+
 HIGHSCORE_TABLE_SIZE = 3
 CORRECT_ANSWER_SCORE = 5
 
@@ -50,419 +53,6 @@ ERROR_CLIENT_WAS_ADDED_WRONG = "Error: This client was not added by `accept_new_
 
 # ====================
 # ===== Classes:
-
-
-class Question:
-    """
-    A class represents a user in the trivia game.
-
-    -------
-
-    Attributes
-    -------
-    question
-
-    optional_answers
-
-    answer
-
-    -------
-
-    Methods
-    -------
-    get_question()
-        - Returns the question.
-
-    get_optional_answers()
-        Returns a shallow copy of the optional_answers dict.
-
-    get_answer()
-        Returns the correct answer.
-
-    is_correct(answer_num)
-        Gets an integer between 1-4. Returns whether this is the answer or not.
-    """
-
-    def __init__(self, question: str, optional_answers: tuple[str], answer: int) -> None:
-        """
-        Creates a new question.
-
-        ----------
-
-        Parameters
-        ----------
-        question : str
-            The question itself.
-        optional_answers : tuple[str]
-            A tuple of four strings. Each one is a possible answer(str).
-        answer : int
-            The correct answer number.
-        ----------
-
-        Raises
-        ------
-        - TypeError
-            - In case one of the parameters is of inappropriate type.
-        - ValueError
-            - In case the value of one of the parameters is inappropriate.
-        """
-        self.question = question
-        self.optional_answers = optional_answers
-        self.answer = answer
-
-    @property
-    def question(self) -> str:
-        """:obj:`str`: The question itself.
-        """
-        return self._question
-
-    @question.setter
-    def question(self, question: str) -> None:
-        if not isinstance(question, str):
-            raise TypeError
-        self._question = question
-
-    @property
-    def optional_answers(self) -> dict[int, str]:
-        """:obj:`dict`[:obj:`int`,:obj:`str`]: A dict with four pairs.
-
-        Each key is a number(int) between 1-4. Each value is a possible answer(str).
-
-        #### Pay attention: The getter for this property returns a shallow copy of this dict.
-        """
-        return self._optional_answers.copy()
-
-    @optional_answers.setter
-    def optional_answers(self, optional_answers: tuple[str]) -> None:
-        if not isinstance(optional_answers, tuple):
-            raise TypeError
-        if not all(isinstance(s, str) for s in optional_answers):
-            raise TypeError
-        if not len(optional_answers) == NUMBER_OF_ANSWERS:
-            raise ValueError
-        self._optional_answers = {
-            i+1: optional_answers[i] for i in range(NUMBER_OF_ANSWERS)}
-
-    @property
-    def answer(self) -> int:
-        """:obj:`int`: The correct answer number. An integer between 1-4.
-        """
-        return self._answer
-
-    @answer.setter
-    def answer(self, answer: int) -> None:
-        if not isinstance(answer, int):
-            raise TypeError
-        if not answer in range(1, NUMBER_OF_ANSWERS + 1):
-            raise ValueError
-        self._answer = answer
-
-    def get_question(self) -> str:
-        """
-        Returns the question.
-
-        ------
-
-        Returns
-        ------
-        - str
-            - The question.
-        """
-        return self._question
-
-    def get_optional_answers(self) -> dict[int, str]:
-        """
-        Returns a shallow copy of the optional_answers dict.
-
-        ------
-
-        Returns
-        ------
-        - dict[int,str]
-            - All the four answers as a dict.
-
-        Example
-        ------
-        >>> q1.get_answers()
-        {1:'<a1>', 2:'<a2>', 3:'<a3>', 4:'<a4>'}.
-        """
-        return self._optional_answers.copy()
-
-    def get_answer(self) -> int:
-        """
-        Returns the correct answer.
-
-        ------
-
-        Returns
-        ------
-        - int
-            - The answer.
-        """
-        return self._answer
-
-    def is_correct(self, answer_num: int) -> bool:
-        """
-        Gets an integer between 1-4. Returns whether this is the answer or not.
-
-        ------
-
-        Parameters
-        ----------
-        answer_num : int
-            The answer num to be checked.
-
-        Returns
-        ------
-        - bool
-            - True - if correct.
-            - False - if it is not correct.
-        """
-        if not isinstance(answer_num, int):
-            raise TypeError
-        return answer_num == self._answer
-
-
-class User:
-    """
-    A class represents a user in the trivia game. For all the users the server contact with.
-
-    -------
-
-    Attributes
-    -------
-    name
-
-    password
-
-    score
-
-    questions_asked
-
-    -------
-
-    Methods
-    -------
-    add_score(score_tp_add)
-        Add the given score to the user score.
-
-    get_score()
-        Returns the current score of the user.
-
-    mark_question_as_asked(question)
-        Gets a question and add it to the list of questions_asked.
-
-    was_question_asked(question)
-        Gets a question number and checks whether the user has already been asked
-        this question or not.
-    """
-
-    def __init__(self, name: str, password: str, score: int = 0,
-                 questions_asked: Union[list[int], None] = None) -> None:
-        """
-        Creates a new user.
-
-        ----------
-
-        Parameters
-        ----------
-        name : str
-            The user name.
-        password : str
-            The user password.
-        score : int, (default 0)
-            The user score.
-        questions_asked : list[int], (default [])
-            All the questions the user have already been asked.
-        ----------
-
-        Raises
-        ------
-        - TypeError
-            - In case one of the parameters is of inappropriate type.
-        """
-        self.name = name
-        self.password = password
-        self.score = score
-        self.questions_asked = questions_asked
-
-    @property
-    def name(self) -> str:
-        """:obj:`str`: The user name.
-        """
-        return self._name
-
-    @name.setter
-    def name(self, user_name: str) -> None:
-        if not isinstance(user_name, str):
-            raise TypeError
-        self._name = user_name
-
-    @property
-    def password(self) -> str:
-        """:obj:`str`: The user password.
-        """
-        return self._password
-
-    @password.setter
-    def password(self, user_password: str) -> None:
-        if not isinstance(user_password, str):
-            raise TypeError
-        self._password = user_password
-
-    @property
-    def score(self) -> str:
-        """:obj:`str`: The user score (initialized to zero).
-        """
-        return self._score
-
-    @score.setter
-    def score(self, user_score: int) -> None:
-        if not isinstance(user_score, int):
-            raise TypeError
-        # TODO: consider checking the question number...
-        self._score = user_score
-
-    @property
-    def questions_asked(self) -> list[int]:
-        """:obj:`list`[:obj:`int`]: All the questions the user have already been asked.
-
-        #### Pay attention: The getter for this property returns a shallow copy of this list.
-        """
-        return self._questions_asked.copy()
-
-    @questions_asked.setter
-    def questions_asked(self, user_questions_asked: list[int]) -> None:
-        if user_questions_asked is None:
-            self._questions_asked = []
-        else:
-            if not isinstance(user_questions_asked, list):
-                raise TypeError
-            if not all(isinstance(v, int) for v in user_questions_asked):
-                raise TypeError
-            self._questions_asked = user_questions_asked
-
-    def get_name(self) -> str:
-        """
-        Returns the name of the user.
-
-        ------
-
-        Returns
-        ------
-        - str
-            - The username.
-        """
-        return self._name
-
-    def get_password(self) -> str:
-        """
-        Returns the password of the user.
-
-        ------
-
-        Returns
-        ------
-        - str
-            - The password.
-        """
-        return self._password
-
-    def add_score(self, score_to_add: int) -> int:
-        """
-        Add the given score to the user score.
-
-        ------
-
-        Parameters
-        ------
-        score_to_add : int
-            - The score should be added to the user.
-        ------
-
-        Returns
-        ------
-        - int
-            - The user's new score.
-        ------
-
-        Raises
-        ------
-        - TypeError
-            - In case one of the parameters is of inappropriate type.
-        """
-
-        if not isinstance(score_to_add, int):
-            raise TypeError
-        self._score += score_to_add
-        return self._score
-
-    def get_score(self) -> int:
-        """
-        Returns the current score of the user.
-
-        ------
-
-        Returns
-        ------
-        - int
-            - The user's current score.
-        """
-        return self._score
-
-    def mark_question_as_asked(self, question: int) -> None:
-        """
-        Gets a question and add it to the list of questions_asked.
-
-        ------
-
-        Parameters
-        ------
-        question : int
-            - The question number.
-        ------
-
-        Raises
-        ------
-        - TypeError
-            - In case one of the parameters is of inappropriate type.
-        """
-        if not isinstance(question, int):
-            raise TypeError
-        # TODO: consider checking the question number...
-
-        if question in self._questions_asked:
-            return
-        self._questions_asked.append(question)
-
-    def was_question_asked(self, question: int) -> bool:
-        """
-        Gets a question number and checks whether the user has already been asked
-        this question or not.
-
-        ------
-
-        Parameters
-        ------
-        question : int
-            - The question number.
-        ------
-
-        Returns
-        ------
-        - bool
-            - True - If the user has already been asked this question.
-            - False - Otherwise.
-        ------
-
-        Raises
-        ------
-        - TypeError
-            - In case one of the parameters is of inappropriate type.
-        """
-        if not isinstance(question, int):
-            raise TypeError
-        return question in self._questions_asked
 
 
 class Server(ProtocolUser):
@@ -525,26 +115,8 @@ class Server(ProtocolUser):
             - In case one of the parameters is of inappropriate type.
         """
         super().__init__()
-        self.users = {
-            "test": User("test", "test"),
-            "master": User("master", "12345", 300, [2313, 4122]),
-            "wannabe master": User("wannabe master", "12345", 295, [2313, 4122]),
-            "looser": User("master", "12345")
-        }
-        self.questions = {
-            1: Question("How much is 2+2?",
-                        ("3", "4", "2", "1"),
-                        2),
-            2: Question("What is the capital of France?",
-                        ("Lion", "Marseille", "Paris", "Montpellier"),
-                        3),
-            3: Question("What geometric shape is generally used for stop signs?",
-                        ("Triangle", "Octagon", "Rectangle", "Square"),
-                        2),
-            4: Question("What is the name of the biggest technology company in South Korea?",
-                        ("Mazda", "Xiaomi", "Apple", "Samsung"),
-                        4)
-        }
+        self.users = self._load_users()
+        self.questions = self._load_questions()
         self.logged_users = {}
         self.messages_to_send = []
         self.clients = []
@@ -563,16 +135,14 @@ class Server(ProtocolUser):
         return self._users.copy()
 
     @users.setter
-    def users(self, users: dict[str, User]) -> None:
-        if not isinstance(users, dict):
+    def users(self, users: list[User]) -> None:
+        if not isinstance(users, list) or not all(isinstance(u, User) for u in users):
             raise TypeError
-        if not all(isinstance(s, str) and isinstance(u, User) for (s, u) in users.items()):
-            raise TypeError
-        self._users = users
+        self._users = {user.name: user for user in users}
 
     @property
     def questions(self) -> dict[int, Question]:
-        """:obj:`dict`[:obj:`int`,:obj:`Question`]: A dictionary of all the questions.
+        """`dict`[`int`,`Question`]: A dictionary of all the questions.
 
         #### Pay attention: The getter for this property returns a shallow copy of this dict.
         """
@@ -642,6 +212,26 @@ class Server(ProtocolUser):
         if not all(isinstance(soc, socket.socket) for soc in clients):
             raise TypeError
         self._clients = clients
+
+    @staticmethod
+    def _load_users() -> list[User]:
+        with open(USERS_PATH, "r") as read_users:
+            return [User.dict_to_user(user_dict) for user_dict in json.load(read_users)]
+
+    def store_users(self) -> None:
+        with open(USERS_PATH, "w") as write_users:
+            users_list = [user.user_to_dict() for user in self._users.values()]
+            json.dump(users_list, write_users, indent=2)
+
+    @staticmethod
+    def _load_questions() -> dict[int, Question]:
+        with open(QUESTIONS_PATH, "r") as read_questions:
+            return {int(k):Question.dict_to_question(q) for (k,q) in json.load(read_questions).items()}
+
+    def store_questions(self) -> None:
+        with open(QUESTIONS_PATH, "w") as write_questions:
+            questions_dict = {num:q.question_to_dict() for (num,q) in self._questions.items()}
+            json.dump(questions_dict, write_questions, indent=2)
 
     @staticmethod
     def recv_message_and_parse(client: socket.socket) -> Union[tuple[str, str], tuple[None, None]]:
@@ -822,14 +412,11 @@ class Server(ProtocolUser):
             Must be a real and exist socket, otherwise an `OSError` will be raised.
         """
         assert isinstance(client, socket.socket)
-        assert client.getpeername() in self._logged_users  # TODO: remove it
         del self._logged_users[client.getpeername()]
-        assert client.getpeername() not in self._logged_users  # TODO: remove it
         client.close()
-        assert client in self._clients
         self._clients.remove(client)
-        assert client not in self._clients
         print("Connection closed!")
+        self._print_client_sockets()
 
     def _handle_get_score_message(self, client: socket.socket) -> None:
         """
@@ -910,7 +497,7 @@ class Server(ProtocolUser):
         q_num = random.choice(list(self._questions.keys()))
         question = self._questions[q_num]
         q_elements = (str(q_num), question._question) + \
-            tuple(question.optional_answers.values())
+            tuple(question.optional_answers)
         return self._join_data(q_elements)
 
     def _handle_get_question_message(self, client: socket.socket) -> None:
@@ -961,7 +548,7 @@ class Server(ProtocolUser):
             # checks if question number exists.
             question = self._questions[q_num]
             # checks if answer is between 1-4.
-            if answer not in question._optional_answers.keys():
+            if answer not in [i for i in range(1, chatlib.NUMBER_OF_ANSWERS + 1)]:
                 raise ValueError
         except (ValueError, KeyError):
             self._send_error(client, ERROR_INVALID_ANSWER)
@@ -1019,6 +606,17 @@ class Server(ProtocolUser):
         else:
             self._send_error(client, UNKNOWN_ERROR_OCCURRED)
 
+    def _print_client_sockets(self) -> None:
+        """
+        A function to print all the connected clients.
+        """
+        if not self._clients:
+            print("Currently no one is connected.")
+        else:
+            print("Currently connected - {} clients:".format(len(self._clients)))
+            print("\t".join([""] + [str(client.getpeername())
+                  for client in self._clients]))
+
     def accept_new_client(self) -> socket.socket:
         """
         Using `accept`, accepting a new client and adds it to clients list.
@@ -1035,7 +633,7 @@ class Server(ProtocolUser):
         (client_socket, client_address) = self.socket.accept()
         self._clients.append(client_socket)
         print("New client joined!\t{}".format(client_address))
-        # TODO: print all connected clients.
+        self._print_client_sockets()
         return client_socket
 
     def select_clients(self) -> tuple[list[socket.socket], list[socket.socket],
@@ -1093,6 +691,7 @@ class Server(ProtocolUser):
         except OSError:
             pass
         print("Connection closed!")
+        self._print_client_sockets()
 
 
 # ====================
@@ -1125,7 +724,5 @@ def main():
         # handle ready to write
         server.send_messages_to_ready_sockets(ready_to_write)
 
-
-# ====================
 if __name__ == '__main__':
     main()

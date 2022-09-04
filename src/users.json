@@ -1,0 +1,32 @@
+[
+  {
+    "name": "test",
+    "password": "test",
+    "score": 0,
+    "questions_asked": []
+  },
+  {
+    "name": "master",
+    "password": "12345",
+    "score": 300,
+    "questions_asked": [
+      2313,
+      4122
+    ]
+  },
+  {
+    "name": "wannabe master",
+    "password": "1234",
+    "score": 295,
+    "questions_asked": [
+      2313,
+      4122
+    ]
+  },
+  {
+    "name": "looser",
+    "password": "54321",
+    "score": 0,
+    "questions_asked": []
+  }
+]

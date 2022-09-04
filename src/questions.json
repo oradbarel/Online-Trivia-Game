@@ -1,0 +1,42 @@
+{
+  "1": {
+    "question": "How much is 2+2?",
+    "optional_answers": [
+      "3",
+      "4",
+      "2",
+      "1"
+    ],
+    "answer": 2
+  },
+  "2": {
+    "question": "What is the capital of France?",
+    "optional_answers": [
+      "Lion",
+      "Marseille",
+      "Paris",
+      "Montpellier"
+    ],
+    "answer": 3
+  },
+  "3": {
+    "question": "What geometric shape is generally used for stop signs?",
+    "optional_answers": [
+      "Triangle",
+      "Octagon",
+      "Rectangle",
+      "Square"
+    ],
+    "answer": 2
+  },
+  "4": {
+    "question": "What is the name of the biggest technology company in South Korea?",
+    "optional_answers": [
+      "Mazda",
+      "Xiaomi",
+      "Apple",
+      "Samsung"
+    ],
+    "answer": 4
+  }
+}
