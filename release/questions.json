@@ -1,0 +1,112 @@
+{
+  "1": {
+    "question": "How much is 2+2?",
+    "optional_answers": [
+      "3",
+      "4",
+      "2",
+      "1"
+    ],
+    "answer": 2
+  },
+  "2": {
+    "question": "What is the capital of France?",
+    "optional_answers": [
+      "Lion",
+      "Marseille",
+      "Paris",
+      "Montpellier"
+    ],
+    "answer": 3
+  },
+  "3": {
+    "question": "What geometric shape is generally used for stop signs?",
+    "optional_answers": [
+      "Triangle",
+      "Octagon",
+      "Rectangle",
+      "Square"
+    ],
+    "answer": 2
+  },
+  "4": {
+    "question": "What is the name of the biggest technology company in South Korea?",
+    "optional_answers": [
+      "Mazda",
+      "Xiaomi",
+      "Apple",
+      "Samsung"
+    ],
+    "answer": 4
+  },
+  "5": {
+    "question": "Which country produces the most coffee in the world?",
+    "optional_answers": [
+      "Israel",
+      "Germany",
+      "Peru",
+      "Brazil"
+    ],
+    "answer": 4
+  },
+  "6": {
+    "question": "Name the three primary colors:",
+    "optional_answers": [
+      "Red, Yellow, and Blue",
+      "Red, Green, and Blue",
+      "Black, White, and Blue",
+      "White, Red and Blue"
+    ],
+    "answer": 1
+  },
+  "7": {
+    "question": "Who starts first in chess?",
+    "optional_answers": [
+      "White",
+      "Black",
+      "They start alternately",
+      "There is no specific rule"
+    ],
+    "answer": 1
+  },
+  "8": {
+    "question": "What did the Crocodile swallow in Peter Pan?",
+    "optional_answers": [
+      "A niddle",
+      "A gun",
+      "An alarm clock",
+      "A smart watch"
+    ],
+    "answer": 3
+  },
+  "9": {
+    "question": "How long does it take to hard boil an egg?",
+    "optional_answers": [
+      "18 minutes",
+      "7 minutes",
+      "1 minute",
+      "Half an hour"
+    ],
+    "answer": 2
+  },
+  "10": {
+    "question": "How many hearts does an octopus have?",
+    "optional_answers": [
+      "3",
+      "2",
+      "1",
+      "An octopus has no heart"
+    ],
+    "answer": 1
+  },
+  "11": {
+    "question": "Which country did AC/DC originate in?",
+    "optional_answers": [
+      "USA",
+      "Australia",
+      "Germany",
+      "UK"
+    ],
+    "answer": 2
+  }
+}
