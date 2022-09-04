@@ -15,4 +15,6 @@ For running successfully the code, you will need the following:
 * Install `colorama`. You can use the following: `pip install colorama` 
 
 ## Demo Of Client:
-![](https://github.com/Your_Repository_Name/Your_GIF_Name.gif)
+
+https://user-images.githubusercontent.com/75837421/188314765-4a058d83-e3e9-4ff5-9b26-b93345391cf1.mp4
+
